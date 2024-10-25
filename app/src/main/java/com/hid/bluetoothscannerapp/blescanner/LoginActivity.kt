@@ -8,10 +8,12 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.gson.Gson
 import com.hid.bluetoothscannerapp.MainActivity
 import com.hid.bluetoothscannerapp.R
 import okhttp3.*
@@ -49,7 +51,7 @@ class LoginActivity : AppCompatActivity() {
         webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         // Load the Keycloak login URL
-        webView.loadUrl("http://192.168.252.124:8081/login")
+        webView.loadUrl("http://192.168.177.242:8081/login")
 
         // Handle redirection and token extraction
         webView.webViewClient = object : WebViewClient() {
@@ -65,22 +67,40 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun handleRedirect(uri: Uri) {
-        // Extract the JWT token from the URL
+        // Extract the JWT token parameters from the URL
         val idToken = uri.getQueryParameter("id_token")
         val accessToken = uri.getQueryParameter("access_token")
         val refreshToken = uri.getQueryParameter("refresh_token")
 
         if (idToken != null) {
-            // Token is successfully extracted, store it and proceed
-            storeTokens(idToken, accessToken, refreshToken)
-            Log.d("LoginActivity", "ID Token: $idToken")
 
-            // Make authenticated request with OkHttp
-            makeAuthenticatedRequest(idToken)
+            val gson = Gson()
 
-            // Proceed to the next activity (e.g., main Bluetooth scanner activity)
+
+            val json = """
+                {
+                    "id_token": "$idToken",
+                    "access_token": "$accessToken",
+                    "refresh_token": "$refreshToken"
+                }
+            """
+
+
+            val jwtToken = gson.fromJson(json, JwtToken::class.java)
+
+
+            Log.d("LoginActivity", "Deserialized ID Token: ${jwtToken.id_token}")
+            Toast.makeText(this, "ID Token: ${jwtToken.id_token}", Toast.LENGTH_SHORT).show()
+
+
+            storeTokens(jwtToken.id_token, jwtToken.access_token, jwtToken.refresh_token)
+
+            // Make an authenticated request with OkHttp
+            makeAuthenticatedRequest(jwtToken.id_token)
+
+
             val intent = Intent(this, MainActivity::class.java)
-            intent.putExtra("id_token", idToken)
+            intent.putExtra("id_token", jwtToken.id_token)
             startActivity(intent)
             finish()
         } else {
@@ -119,4 +139,11 @@ class LoginActivity : AppCompatActivity() {
             }
         })
     }
+
+
+    data class JwtToken(
+        val id_token: String,
+        val access_token: String?,
+        val refresh_token: String?
+    )
 }
