@@ -38,6 +38,7 @@ android {
 dependencies {
     implementation(libs.androidx.constraintlayout.v220alpha14)
     implementation(libs.okhttp)
+
     implementation("com.google.code.gson:gson:2.10.1")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -47,4 +48,6 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    implementation("com.squareup.okhttp3:okhttp:4.9.1")
+
 }

@@ -52,13 +52,15 @@ class LoginActivity : AppCompatActivity() {
         webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         // Load the Keycloak login URL
-        webView.loadUrl("http://192.168.177.242:8081/login")
+        webView.loadUrl("http://192.168.217.242:8081/login")
 
         // Handle redirection and token extraction
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                 if (url != null && url.contains("session_state") && url.contains("code")) {
-                    Log.d("TAG", "Redirect URL: $url")
+                    Log.d("redirectLogin", "Redirect URL: $url")
+                    webView.visibility = WebView.GONE
+
                     CoroutineScope(Dispatchers.Main).launch {
                         try {
                             delay(2000)
@@ -68,14 +70,19 @@ class LoginActivity : AppCompatActivity() {
                                     val gson = Gson()
                                     val trimmedJsonString = jsonFormatted.trim('"')
                                     val responseFromWebView = gson.fromJson(trimmedJsonString, JwtToken::class.java)
-                                    Log.d("TAG", "classGson: $responseFromWebView")
+                                    Log.d("Json res", "classGson: $responseFromWebView")
+                                    // Log the response for debugging
+
                                     storeTokens(responseFromWebView.id_token)
+                                    val intent = Intent(this@LoginActivity, MainActivity::class.java)
+                                    startActivity(intent)
+                                    finish()
                                 } catch (e: Exception) {
-                                    Log.e("TAG", "Error parsing JSON or storing token: ${e.message}", e)
+                                    Log.e("err", "Error parsing JSON or storing token: ${e.message}", e)
                                 }
                             }
                         } catch (e: Exception) {
-                            Log.e("TAG", "Error executing JavaScript or coroutine scope: ${e.message}", e)
+                            Log.e("err", "Error executing JavaScript or coroutine scope: ${e.message}", e)
                         }
                     }
                 }
@@ -84,6 +91,8 @@ class LoginActivity : AppCompatActivity() {
             }
         }
     }
+
+
 
 
     private fun storeTokens(atHash: String) {
@@ -96,9 +105,9 @@ class LoginActivity : AppCompatActivity() {
         val retrievedIdToken = sharedPreferences.getString("id_token", null)
         Log.d("StoreTokens", "Retrieved at_hash: $retrievedIdToken")
 
-        val intent = Intent(this, MainActivity::class.java)
-        startActivity(intent)
-        finish()
+//        val intent = Intent(this, MainActivity::class.java)
+//        startActivity(intent)
+//        finish()
 
         // Show a toast message to confirm storage
         Toast.makeText(this@LoginActivity, "id_token: $retrievedIdToken", Toast.LENGTH_LONG).show()
