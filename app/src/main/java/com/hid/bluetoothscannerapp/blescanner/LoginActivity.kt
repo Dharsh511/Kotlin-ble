@@ -104,10 +104,12 @@ class LoginActivity : AppCompatActivity() {
 
         val retrievedIdToken = sharedPreferences.getString("id_token", null)
         Log.d("StoreTokens", "Retrieved at_hash: $retrievedIdToken")
+        val cleanedToken=retrievedIdToken?.trim()?.replace(Regex("[^\\x20-\\x7E]"),"")?:""
+     val tokenLength = cleanedToken.length
+        //val tokenLength = retrievedIdToken?.length ?: 0
 
-//        val intent = Intent(this, MainActivity::class.java)
-//        startActivity(intent)
-//        finish()
+
+   Log.d("IDTokenLength", "ID Token Length: $tokenLength")
 
         // Show a toast message to confirm storage
         Toast.makeText(this@LoginActivity, "id_token: $retrievedIdToken", Toast.LENGTH_LONG).show()
