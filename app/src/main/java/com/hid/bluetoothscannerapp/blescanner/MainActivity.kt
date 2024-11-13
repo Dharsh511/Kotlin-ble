@@ -1,17 +1,19 @@
-package com.hid.bluetoothscannerapp
+package com.hid.bluetoothscannerapp.blescanner
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import com.auth0.android.jwt.JWT
+import com.hid.bluetoothscannerapp.R
 import java.util.UUID
 
 @RequiresApi(Build.VERSION_CODES.S)
@@ -31,6 +33,16 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        val welcomeTextView: TextView = findViewById(R.id.tv_welcome)
+        val sharedPreferences = getSharedPreferences("auth_prefs", MODE_PRIVATE)
+        val retrievedIdToken = sharedPreferences.getString("id_token", null)
+
+        // If ID token exists, extract the username and display welcome message
+        if (retrievedIdToken != null) {
+            val jwt = JWT(retrievedIdToken)
+            val username = jwt.getClaim("preferred_username").asString()
+            welcomeTextView.text = "Welcome, $username"
+        }
 
         // Initialize buttons
         btnConnect = findViewById(R.id.btn_connect)
@@ -100,7 +112,7 @@ class MainActivity : AppCompatActivity() {
                 checkBluetoothPermission()
                 if (status == BluetoothGatt.GATT_SUCCESS) {
                     Log.d("MainActivity", "Services discovered on device")
-                    gatt.requestMtu(256)
+                    gatt.requestMtu(512)
                 } else {
                     Log.e("MainActivity", "Service discovery failed")
                 }
@@ -121,7 +133,7 @@ class MainActivity : AppCompatActivity() {
         })?.let { bluetoothGatt = it }
     }
 
-    private fun sendIdTokenInChunks(retrievedIdToken: String, chunkSize: Int =256) {
+    private fun sendIdTokenInChunks(retrievedIdToken: String, chunkSize: Int =512) {
         chunks = retrievedIdToken.chunked(chunkSize)
         currentChunkIndex = 0
         sendNextChunk()
@@ -139,7 +151,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (currentChunkIndex < chunks.size) {
-            val nextChunk = chunks[currentChunkIndex]
+            var nextChunk = chunks[currentChunkIndex]
+
+            if ((currentChunkIndex == chunks.size - 1)&& !nextChunk.contains("END_OF_TOKEN")) {
+                nextChunk += "END_OF_TOKEN"
+                Log.d("sendNextChunk", "Appending END_OF_TOKEN to the last chunk")
+            }
             Log.d("sendNextChunk", "Sending next chunk: $nextChunk")
             sendCommandToM5Stack(nextChunk)
             currentChunkIndex++

@@ -14,12 +14,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.gson.Gson
-import com.hid.bluetoothscannerapp.MainActivity
 import com.hid.bluetoothscannerapp.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.auth0.android.jwt.JWT
+
 
 class LoginActivity : AppCompatActivity() {
 
@@ -52,7 +53,7 @@ class LoginActivity : AppCompatActivity() {
         webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         // Load the Keycloak login URL
-        webView.loadUrl("http://192.168.217.242:8081/login")
+        webView.loadUrl("http://192.168.50.242:8081/login")
 
         // Handle redirection and token extraction
         webView.webViewClient = object : WebViewClient() {
@@ -87,6 +88,7 @@ class LoginActivity : AppCompatActivity() {
                     }
                 }
 
+
                 return false
             }
         }
@@ -104,16 +106,25 @@ class LoginActivity : AppCompatActivity() {
 
         val retrievedIdToken = sharedPreferences.getString("id_token", null)
         Log.d("StoreTokens", "Retrieved at_hash: $retrievedIdToken")
-        val cleanedToken=retrievedIdToken?.trim()?.replace(Regex("[^\\x20-\\x7E]"),"")?:""
-     val tokenLength = cleanedToken.length
-        //val tokenLength = retrievedIdToken?.length ?: 0
+//        val cleanedToken=retrievedIdToken?.trim()?.replace(Regex("[^\\x20-\\x7E]"),"")?:""
+//     val tokenLength = cleanedToken.length
+        val tokenLength = retrievedIdToken?.length ?: 0
 
 
    Log.d("IDTokenLength", "ID Token Length: $tokenLength")
 
         // Show a toast message to confirm storage
         Toast.makeText(this@LoginActivity, "id_token: $retrievedIdToken", Toast.LENGTH_LONG).show()
+
+    if (retrievedIdToken != null) {
+        // Decode JWT and extract the username
+        val jwt = JWT(retrievedIdToken)
+        val username = jwt.getClaim("preferred_username").asString()
+        Log.d("JWT", "Username from token: $username")
+
+
     }
+}
 
 
     data class JwtToken(

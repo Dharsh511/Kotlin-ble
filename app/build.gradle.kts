@@ -38,7 +38,7 @@ android {
 dependencies {
     implementation(libs.androidx.constraintlayout.v220alpha14)
     implementation(libs.okhttp)
-
+    implementation ("com.auth0.android:jwtdecode:2.0.0")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

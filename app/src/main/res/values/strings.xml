@@ -4,5 +4,12 @@
     <string name="tw_scan_results_title">Scan Results</string>
     <string name="ble_permission_rationale">This app needs to access bluetooth and location in order to scan for BLE devices.</string>
     <string name="ble_permissions_denied_message">Some permissions were not granted, please grant them and try again</string>
+    <string name="log_in_with_sso">Log in with SSO</string>
+    <string name="sign_in_with_sso_and_scan_for_nearby_devices">Sign in with SSO and Scan for Nearby Devices</string>
+    <string name="tap_below_to_securely_sign_in_and_initiate_a_bluetooth_scan_n_for_nearby_compatible_devices">Tap below to securely sign in and initiate a Bluetooth scan for nearby compatible devices.</string>
+    <string name="ble_device_control">BLE Device Control</string>
+    <string name="connect">Connect</string>
+    <string name="unlock">Unlock</string>
+    <string name="disconnect">Disconnect</string>
 
 </resources>

@@ -35,10 +35,7 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".DeviceInfoActivity"
-            android:exported="false" />
-        <activity
-            android:name=".MainActivity"
+            android:name=".blescanner.MainActivity"
             android:exported="false">
         </activity>
     </application>
