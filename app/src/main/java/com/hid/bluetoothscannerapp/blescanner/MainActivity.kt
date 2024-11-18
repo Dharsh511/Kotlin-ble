@@ -15,6 +15,97 @@ import androidx.core.app.ActivityCompat
 import com.auth0.android.jwt.JWT
 import com.hid.bluetoothscannerapp.R
 import java.util.UUID
+import java.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
+
+// EncryptionAES class definition (same as you provided)
+class EncryptionAES {
+
+    // ANSI X9.23 padding function
+    private fun padAnSix923(data: ByteArray, blockSize: Int): ByteArray {
+        val paddingLength = blockSize - (data.size % blockSize)
+        val paddingBytes = ByteArray(paddingLength)
+        paddingBytes[paddingLength - 1] = paddingLength.toByte() // Add padding length as the last byte
+        return data + paddingBytes
+    }
+
+    private fun removePadding(data: ByteArray): ByteArray {
+        val paddingLength = data[data.size - 1].toInt() // Read padding length from the last byte
+        return data.copyOfRange(0, data.size - paddingLength) // Remove padding bytes
+    }
+
+    // Encrypt the ID token using AES-ECB with the key from its custom claim
+    fun encryptIDTokenWithCustomKey(idToken: String, claimName: String): String {
+        // Decode the JWT to get the custom claim containing the Base64-encoded AES key
+        val decodedJWT = JWT(idToken)
+        val base64EncodedKey = decodedJWT.getClaim(claimName).asString()
+
+        // Decode the Base64 key to raw bytes
+        val aesKeyBytes = Base64.getDecoder().decode(base64EncodedKey)
+        Log.d("keyBytes","keyasRawbytes: ${aesKeyBytes}")
+        Log.d("lengthKeybytes", "length is: ${aesKeyBytes.size}")
+        // Validate the AES key length
+        if (aesKeyBytes.size != 16 && aesKeyBytes.size != 24 && aesKeyBytes.size != 32) {
+            throw IllegalArgumentException("Invalid AES key length: ${aesKeyBytes.size}. Expected 16, 24, or 32 bytes.")
+        }
+
+        // Create AES key
+        val aesKey = SecretKeySpec(aesKeyBytes, "AES")
+
+        // Initialize AES cipher in ECB mode
+        val cipher = Cipher.getInstance("AES/ECB/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey)
+
+        // Pad the ID token to a multiple of 16 bytes
+        val paddedData = padAnSix923(idToken.toByteArray(), 16)
+
+        // Encrypt the padded data
+        val encryptedData = cipher.doFinal(paddedData)
+        Log.d("EncryptionAES", "Encrypted byte array length (before Base64 encoding): ${encryptedData.size} bytes")
+
+        // Convert encrypted data to Base64 for easy storage or transmission
+        val base64EncodedEncryptedData = Base64.getEncoder().encodeToString(encryptedData)
+        return base64EncodedEncryptedData
+    }
+
+    // Decrypt the encrypted token using AES-ECB with the same key
+    fun decryptIDTokenWithCustomKey(encryptedToken: String, claimName: String): String {
+        // Decode the JWT to get the custom claim containing the Base64-encoded AES key
+        val decodedJWT = JWT(encryptedToken)
+        val base64EncodedKey = decodedJWT.getClaim(claimName).asString()
+
+        // Decode the Base64 key to raw bytes
+        val aesKeyBytes = Base64.getDecoder().decode(base64EncodedKey)
+
+        // Validate the AES key length
+        if (aesKeyBytes.size != 16 && aesKeyBytes.size != 24 && aesKeyBytes.size != 32) {
+            throw IllegalArgumentException("Invalid AES key length: ${aesKeyBytes.size}. Expected 16, 24, or 32 bytes.")
+        }
+
+        // Create AES key
+        val aesKey = SecretKeySpec(aesKeyBytes, "AES")
+
+        // Initialize AES cipher in ECB mode for decryption
+        val cipher = Cipher.getInstance("AES/ECB/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, aesKey)
+
+        // Decode the Base64-encoded encrypted token to byte array
+        val encryptedData = Base64.getDecoder().decode(encryptedToken)
+
+        // Decrypt the encrypted data
+        val decryptedData = cipher.doFinal(encryptedData)
+
+        // Remove padding from the decrypted data
+        val decryptedToken = String(removePadding(decryptedData))
+
+        // Log the decrypted ID token for verification
+        Log.d("DecryptionAES", "Decrypted ID token: $decryptedToken")
+
+        return decryptedToken
+    }
+}
+
 
 @RequiresApi(Build.VERSION_CODES.S)
 class MainActivity : AppCompatActivity() {
@@ -33,15 +124,42 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
         val welcomeTextView: TextView = findViewById(R.id.tv_welcome)
         val sharedPreferences = getSharedPreferences("auth_prefs", MODE_PRIVATE)
         val retrievedIdToken = sharedPreferences.getString("id_token", null)
 
-        // If ID token exists, extract the username and display welcome message
         if (retrievedIdToken != null) {
-            val jwt = JWT(retrievedIdToken)
-            val username = jwt.getClaim("preferred_username").asString()
-            welcomeTextView.text = "Welcome, $username"
+            try {
+                Log.d("MainActivity", "Retrieved ID Token: $retrievedIdToken")
+                // Parse and display the username from the original token
+                val jwt = JWT(retrievedIdToken)
+                val username = jwt.getClaim("preferred_username").asString()
+                welcomeTextView.text = "Welcome, $username"
+
+                // Encrypt the token for testing purposes
+                val encryptedToken =
+                    encryptIDTokenForTesting(retrievedIdToken, "key")
+                Log.d("Encryption", "Encrypted Token: $encryptedToken")
+
+                // Decrypt the token to verify integrity
+                val decryptedToken =
+                    decryptIDTokenWithCustomKey(encryptedToken, "key")
+                Log.d("Decryption", "Decrypted Token: $decryptedToken")
+
+                // Compare the original and decrypted tokens
+                if (retrievedIdToken == decryptedToken) {
+                    Log.d("TokenVerification", "Decryption successful: Tokens match.")
+                } else {
+                    Log.e("TokenVerification", "Decryption failed: Tokens do not match.")
+                }
+
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error parsing token: ${e.message}",e)
+            }
+
+        } else {
+            Log.e("MainActivity", "No ID token found in SharedPreferences")
         }
 
         // Initialize buttons
@@ -66,6 +184,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun encryptIDTokenForTesting(idToken: String, claimName: String): String {
+        val encryptionAES = EncryptionAES()
+        return encryptionAES.encryptIDTokenWithCustomKey(idToken, claimName)
+    }
+
+    private fun decryptIDTokenWithCustomKey(encryptedToken: String, claimName: String): String {
+        val encryptionAES = EncryptionAES()
+        return encryptionAES.decryptIDTokenWithCustomKey(encryptedToken, claimName)
+    }
+
     private fun retrieveAndSendIdToken() {
         // Retrieve ID token from SharedPreferences
         Log.d("MainActivity", "retrieveAndSendIdToken called")
@@ -73,15 +201,109 @@ class MainActivity : AppCompatActivity() {
         val retrievedIdToken = sharedPreferences.getString("id_token", null)
 
         if (retrievedIdToken != null) {
-            Log.d("MainActivity", "Sending ID Token: $retrievedIdToken")
-            sendIdTokenInChunks(retrievedIdToken)
+            Log.d("MainActivity", "Encrypting and sending ID Token: $retrievedIdToken")
+
+            // Encrypt the ID token using AES encryption
+            val encryptionAES = EncryptionAES()
+            val encryptedToken = encryptionAES.encryptIDTokenWithCustomKey(retrievedIdToken, "key")
+
+            Log.d("MainActivity", "Encrypted ID Token: $encryptedToken")
+            Log.d("MainActivity", "Encrypted ID Token length: ${encryptedToken.length}")
+
+            sendIdTokenInChunks(encryptedToken) // Send the encrypted token
         } else {
             Log.d("MainActivity", "No ID Token found")
             Toast.makeText(this, "ID Token not found", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Connect to the specific device using its MAC address
+    private fun sendIdTokenInChunks(encryptedIdToken: String, chunkSize: Int = 512) {
+        chunks = encryptedIdToken.chunked(chunkSize)
+        currentChunkIndex = 0
+        sendNextChunk()
+    }
+
+    private var startTime: Long = 0
+    private var endTime: Long = 0
+
+    private fun sendNextChunk() {
+        if (currentChunkIndex == 0) {
+            // Start time when sending the first chunk
+            startTime = System.currentTimeMillis()
+            Log.d("sendNextChunk", "Sending chunks started at: $startTime ms")
+        }
+
+        if (currentChunkIndex < chunks.size) {
+            var nextChunk = chunks[currentChunkIndex]
+
+            if ((currentChunkIndex == chunks.size - 1) && !nextChunk.contains("END_OF_TOKEN")) {
+                nextChunk += "END_OF_TOKEN"
+                Log.d("sendNextChunk", "Appending END_OF_TOKEN to the last chunk")
+            }
+            Log.d("sendNextChunk", "Sending next chunk: $nextChunk")
+            sendCommandToM5Stack(nextChunk)
+            currentChunkIndex++
+        } else {
+            endTime = System.currentTimeMillis()
+            Log.d("sendNextChunk", "All chunks sent")
+
+            val totalDuration = endTime - startTime
+            Log.d("sendNextChunk", "Total time taken to send all chunks: $totalDuration ms")
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun sendCommandToM5Stack(tokenChunk: String) {
+        Log.d("sendCommandToM5Stack", "Method called with token length: ${tokenChunk.length}")
+
+        bluetoothGatt?.let { gatt ->
+            Log.d("sendCommandToM5Stack", "BluetoothGatt instance found, attempting to send token")
+
+            // Fetch the desired service and characteristic
+            val service = gatt.getService(serviceUUID)
+            if (service == null) {
+                Log.d("sendCommandToM5Stack", "Service with UUID $serviceUUID not found")
+                Toast.makeText(this, "Service not found", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val characteristic = service.getCharacteristic(unlockCharacteristicUUID)
+            if (characteristic == null) {
+                Log.d("sendCommandToM5Stack", "Characteristic with UUID $unlockCharacteristicUUID not found")
+                Toast.makeText(this, "Characteristic not found", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            // Check if the characteristic is writable
+            if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
+                Log.d("sendCommandToM5Stack", "Characteristic is writable")
+                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                characteristic.value = tokenChunk.toByteArray()
+
+                Log.d("sendCommandToM5Stack", "Encrypted Token Length: ${tokenChunk.length}")
+
+                // Check for permission
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    Log.d("sendCommandToM5Stack", "Bluetooth permission not granted, requesting permission")
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), PERMISSION_REQUEST_CODE)
+                    return
+                }
+
+                // Write characteristic to device
+                val success = gatt.writeCharacteristic(characteristic)
+                if (success) {
+                    Log.d("sendCommandToM5Stack", "Successfully sent the token chunk to M5Stack")
+                } else {
+                    Log.d("sendCommandToM5Stack", "Failed to send the token chunk to M5Stack")
+                }
+            } else {
+                Log.d("sendCommandToM5Stack", "Characteristic is not writable")
+            }
+        } ?: run {
+            Log.d("sendCommandToM5Stack", "BluetoothGatt is null")
+        }
+    }
+
     private fun connectToDevice() {
         val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         val bluetoothDevice = bluetoothAdapter.getRemoteDevice(deviceMacAddress)
@@ -133,100 +355,9 @@ class MainActivity : AppCompatActivity() {
         })?.let { bluetoothGatt = it }
     }
 
-    private fun sendIdTokenInChunks(retrievedIdToken: String, chunkSize: Int =512) {
-        chunks = retrievedIdToken.chunked(chunkSize)
-        currentChunkIndex = 0
-        sendNextChunk()
-    }
-
-    private var startTime: Long = 0
-    private var endTime: Long = 0
 
 
-    private fun sendNextChunk() {
-        if (currentChunkIndex == 0) {
-            // Start time when sending the first chunk
-            startTime = System.currentTimeMillis()
-            Log.d("sendNextChunk", "Sending chunks started at: $startTime ms")
-        }
 
-        if (currentChunkIndex < chunks.size) {
-            var nextChunk = chunks[currentChunkIndex]
-
-            if ((currentChunkIndex == chunks.size - 1)&& !nextChunk.contains("END_OF_TOKEN")) {
-                nextChunk += "END_OF_TOKEN"
-                Log.d("sendNextChunk", "Appending END_OF_TOKEN to the last chunk")
-            }
-            Log.d("sendNextChunk", "Sending next chunk: $nextChunk")
-            sendCommandToM5Stack(nextChunk)
-            currentChunkIndex++
-        }
-        else {
-            endTime = System.currentTimeMillis()
-            //Log.d("sendNextChunk","Sending chunks ended at: $endTime ms")
-            Log.d("sendNextChunk", "All chunks sent")
-
-            val totalDuration = endTime - startTime
-            Log.d("sendNextChunk", "Total time taken to send all chunks: $totalDuration ms")
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun sendCommandToM5Stack(tokenChunk: String) {
-        Log.d("sendCommandToM5Stack", "Method called with token length: ${tokenChunk.length}")
-
-        bluetoothGatt?.let { gatt ->
-            Log.d("sendCommandToM5Stack", "BluetoothGatt instance found, attempting to send token")
-
-            // Fetch the desired service and characteristic
-            val service = gatt.getService(serviceUUID)
-            if (service == null) {
-                Log.d("sendCommandToM5Stack", "Service with UUID $serviceUUID not found")
-                Toast.makeText(this, "Service not found", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            val characteristic = service.getCharacteristic(unlockCharacteristicUUID)
-            if (characteristic == null) {
-                Log.d("sendCommandToM5Stack", "Characteristic with UUID $unlockCharacteristicUUID not found")
-                Toast.makeText(this, "Characteristic not found", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            // Check if the characteristic is writable
-            if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
-                Log.d("sendCommandToM5Stack", "Characteristic is writable")
-                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                characteristic.value = tokenChunk.toByteArray()
-
-                Log.d("sendCommandToM5Stack", "ID Token Length: ${tokenChunk.length}")
-
-                // Check for permission
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    Log.d("sendCommandToM5Stack", "Bluetooth permission not granted, requesting permission")
-                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), PERMISSION_REQUEST_CODE)
-                    return
-                }
-
-                // Write characteristic to device
-                val success = gatt.writeCharacteristic(characteristic)
-                if (success) {
-                    Log.d("sendCommandToM5Stack", "Chunk sent successfully")
-                } else {
-                    Log.d("sendCommandToM5Stack", "Failed to send chunk")
-                    Toast.makeText(this, "Failed to send ID token", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Log.d("sendCommandToM5Stack", "Characteristic is not writable")
-                Toast.makeText(this, "Characteristic not writable", Toast.LENGTH_SHORT).show()
-            }
-        } ?: run {
-            Log.d("sendCommandToM5Stack", "BluetoothGatt is null, not connected to device")
-            Toast.makeText(this, "Not connected to device", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // Disconnect from the device
     private fun disconnectFromDevice() {
         bluetoothGatt?.let { gatt ->
             checkBluetoothPermission()
@@ -255,21 +386,33 @@ class MainActivity : AppCompatActivity() {
     private fun requestBluetoothPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT),
+                this,
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ),
                 PERMISSION_REQUEST_CODE
             )
         } else {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH), PERMISSION_REQUEST_CODE)
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.BLUETOOTH),
+                PERMISSION_REQUEST_CODE
+            )
         }
     }
 
-    // Handle the result of the permission request
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Bluetooth permission granted", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show()
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d("MainActivity", "Bluetooth permission granted")
+            } else {
+                Log.d("MainActivity", "Bluetooth permission denied")
+                Toast.makeText(this, "Bluetooth permission is required for the app to function", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
