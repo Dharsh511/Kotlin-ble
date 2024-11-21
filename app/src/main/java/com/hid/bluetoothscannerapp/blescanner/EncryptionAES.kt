@@ -1,4 +1,4 @@
-package com.hid.bluetoothscannerapp.blescanner.model
+package com.hid.bluetoothscannerapp.blescanner
 
 import android.util.Log
 import com.auth0.android.jwt.JWT

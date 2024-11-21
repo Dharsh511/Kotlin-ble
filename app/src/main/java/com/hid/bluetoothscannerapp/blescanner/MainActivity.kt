@@ -14,7 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.auth0.android.jwt.JWT
 import com.hid.bluetoothscannerapp.R
-import com.hid.bluetoothscannerapp.blescanner.model.EncryptionAES
+import com.hid.bluetoothscannerapp.blescanner.EncryptionAES
 import java.util.UUID
 
 
