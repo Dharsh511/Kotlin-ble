@@ -1,57 +1,62 @@
 package com.hid.bluetoothscannerapp.blescanner
 
 import android.util.Log
-import com.auth0.android.jwt.JWT
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 
 class EncryptionAES {
 
-    private fun padAnSix923(data: ByteArray, blockSize: Int): ByteArray {
-        val paddingLength = blockSize - (data.size % blockSize)
-        val paddingBytes = ByteArray(paddingLength)
-        paddingBytes[paddingLength - 1] = paddingLength.toByte()
-
-        Log.d("PaddingAES", "Padded data: ${data.joinToString(", ")}")
-        Log.d("PaddingAES", "Padding length: $paddingLength")
-        return data + paddingBytes
-    }
-
-
-
+    // Method to encrypt ID Token with PKCS5 padding
     fun encryptIDTokenWithCustomKey(idToken: String, claimName: String): String {
+        try {
+            // Extract the AES key from the ID token claim
+            val decodedJWT = com.auth0.android.jwt.JWT(idToken)
+            val base64EncodedKey = decodedJWT.getClaim(claimName).asString()
 
-        val decodedJWT = JWT(idToken)
-        val base64EncodedKey = decodedJWT.getClaim(claimName).asString()
+            if (base64EncodedKey.isNullOrEmpty()) {
+                Log.e("EncryptionAES", "Claim '$claimName' is missing or empty in the JWT.")
+                throw IllegalArgumentException("Invalid or missing claim: $claimName")
+            }
+
+            Log.d("DecodedClaim", "Base64 Encoded Key from Claim: $base64EncodedKey")
+
+            // Decode Base64 key
+            val aesKeyBytes = Base64.getDecoder().decode(base64EncodedKey)
+            Log.d("AESKey", "Decoded AES Key (hex): ${aesKeyBytes.joinToString("") { String.format("%02X", it) }}")
+            Log.d("AESKeyLength", "AES Key length: ${aesKeyBytes.size} bytes")
+
+            if (aesKeyBytes.size !in listOf(16, 24, 32)) {
+                Log.e("EncryptionAES", "Invalid AES key length: ${aesKeyBytes.size}")
+                throw IllegalArgumentException("AES key length must be 16, 24, or 32 bytes.")
+            }
+
+            val aesKey = SecretKeySpec(aesKeyBytes, "AES")
+
+            // Prepare cipher for AES/ECB/PKCS5Padding
+            val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+            cipher.init(Cipher.ENCRYPT_MODE, aesKey)
+
+            // Convert plaintext to bytes
+            val plaintextBytes = idToken.toByteArray(Charsets.UTF_8)
+            Log.d("Plaintext", "Plaintext: $idToken")
+            Log.d("PlaintextHex", "Plaintext (hex): ${plaintextBytes.joinToString("") { String.format("%02X", it) }}")
 
 
-        val aesKeyBytes = Base64.getDecoder().decode(base64EncodedKey)
-        Log.d("keyBytes", "keyasRawbytes: ${aesKeyBytes}")
-        Log.d("lengthKeybytes", "length is: ${aesKeyBytes.size}")
-        if (aesKeyBytes.size != 16 && aesKeyBytes.size != 24 && aesKeyBytes.size != 32) {
-            throw IllegalArgumentException("Invalid AES key length: ${aesKeyBytes.size}. Expected 16, 24, or 32 bytes.")
+            // Encrypt the plaintext (Cipher will handle PKCS5 padding automatically)
+            val encryptedData = cipher.doFinal(plaintextBytes)
+            Log.d("EncryptedDataHex", "Encrypted Data (hex): ${encryptedData.joinToString("") { String.format("%02X", it) }}")
+            Log.d("EncryptedDataLength", "Encrypted data length: ${encryptedData.size} bytes")
+
+            // Base64 encode the encrypted data
+            val base64EncodedEncryptedData = Base64.getEncoder().encodeToString(encryptedData)
+            Log.d("Base64Ciphertext", "Base64 Encrypted Data: $base64EncodedEncryptedData")
+
+            return base64EncodedEncryptedData
+        } catch (e: Exception) {
+            Log.e("EncryptionAES", "Error during encryption: ${e.message}", e)
+            throw RuntimeException("Error during encryption", e)
         }
-
-
-        val aesKey = SecretKeySpec(aesKeyBytes, "AES")
-
-
-        val cipher = Cipher.getInstance("AES/ECB/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, aesKey)
-
-
-        val paddedData = padAnSix923(idToken.toByteArray(), 16)
-
-
-        val encryptedData = cipher.doFinal(paddedData)
-        Log.d(
-            "EncryptionAES",
-            "Encrypted byte array length (before Base64 encoding): ${encryptedData.size} bytes"
-        )
-
-
-        val base64EncodedEncryptedData = Base64.getEncoder().encodeToString(encryptedData)
-        return base64EncodedEncryptedData
     }
+
 }

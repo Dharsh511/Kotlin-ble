@@ -53,7 +53,7 @@ class LoginActivity : AppCompatActivity() {
         webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
 
-        webView.loadUrl("http://192.168.50.242:8081/login")
+        webView.loadUrl("http://192.168.251.242:8081/login")
 
 
         webView.webViewClient = object : WebViewClient() {

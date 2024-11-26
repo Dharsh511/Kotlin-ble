@@ -1,5 +1,4 @@
 package com.hid.bluetoothscannerapp.blescanner
-
 import android.Manifest
 import android.bluetooth.*
 import android.content.pm.PackageManager
